@@ -162,6 +162,31 @@
   .field .hint{font-size:11px; color:var(--muted-2); margin-top:6px; line-height:1.5;}
   .field input{width:100%;}
   .row-2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+
+  .tone-item{
+    display:flex; align-items:center; gap:11px; padding:12px 13px; margin-bottom:8px;
+    background:var(--panel); border:1px solid var(--line); border-radius:13px; cursor:pointer;
+  }
+  .tone-item.selected{border-color:var(--cyan); background:linear-gradient(180deg, rgba(63,214,198,0.08), var(--panel));}
+  .tone-item .radio{
+    flex:none; width:18px; height:18px; border-radius:50%; border:2px solid var(--muted-2); position:relative;
+  }
+  .tone-item.selected .radio{border-color:var(--cyan);}
+  .tone-item.selected .radio::after{content:""; position:absolute; inset:3px; border-radius:50%; background:var(--cyan);}
+  .tone-item .ti-text{flex:1; min-width:0;}
+  .tone-item .ti-name{font-size:13.5px; font-weight:600;}
+  .tone-item .ti-desc{font-size:11px; color:var(--muted); margin-top:2px;}
+  .tone-item .ti-play{
+    flex:none; width:34px; height:34px; border-radius:50%; background:var(--panel-raised);
+    border:1px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--cyan); font-size:13px;
+  }
+  .tone-item .ti-play:active{transform:scale(0.92);}
+
+  .vib-chip{
+    padding:10px 4px; text-align:center; font-size:12px; font-weight:600; border-radius:12px;
+    background:var(--panel); border:1px solid var(--line); color:var(--muted); cursor:pointer;
+  }
+  .vib-chip.selected{border-color:var(--cyan); color:var(--cyan); background:rgba(63,214,198,0.08);}
   .switch-row{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:var(--panel); border:1px solid var(--line); border-radius:12px; margin-bottom:12px;}
   .switch-row .t{font-size:13.5px; font-weight:600;}
   .switch-row .s{font-size:11.5px; color:var(--muted); margin-top:2px;}
@@ -262,13 +287,40 @@
       <div><div class="t">Notificaciones push</div><div class="s" id="notifSub">Requiere permiso del navegador</div></div>
       <label class="switch"><input type="checkbox" id="notifToggle"><span class="track"></span><span class="thumb"></span></label>
     </div>
+
+    <div class="section-title">En segundo plano (servidor)</div>
+    <div class="banner" style="margin-bottom:12px;">
+      Con la app cerrada o el teléfono bloqueado, el navegador no puede seguir consultando el sensor por sí solo. Para recibir alertas en ese caso, un servidor externo debe vigilar los sensores y enviarte la notificación. Configura aquí la URL del backend (ver instrucciones de despliegue).
+    </div>
+    <div class="field">
+      <label>URL del backend de notificaciones</label>
+      <input type="url" id="backendUrl" placeholder="https://tu-backend.onrender.com" />
+      <div class="hint">La generas siguiendo el README del paquete <span class="mono">insarwatch-backend</span>.</div>
+    </div>
+    <div class="switch-row">
+      <div><div class="t">Activar alertas en segundo plano</div><div class="s" id="bgPushSub">Desactivado</div></div>
+      <label class="switch"><input type="checkbox" id="bgPushToggle"><span class="track"></span><span class="thumb"></span></label>
+    </div>
     <div class="switch-row">
       <div><div class="t">Sonido de alerta</div><div class="s">Reproduce un pitido al detectar un pico</div></div>
       <label class="switch"><input type="checkbox" id="soundToggle"><span class="track"></span><span class="thumb"></span></label>
     </div>
+
+    <div class="field">
+      <label>Tono de alarma</label>
+      <div id="toneList"></div>
+      <div class="hint">Solo suena con la app abierta en primer plano. Toca ▶ para escuchar antes de elegir.</div>
+    </div>
+
     <div class="switch-row">
       <div><div class="t">Vibración</div><div class="s">Vibra el teléfono al detectar un pico</div></div>
       <label class="switch"><input type="checkbox" id="vibrateToggle"><span class="track"></span><span class="thumb"></span></label>
+    </div>
+
+    <div class="field">
+      <label>Intensidad de vibración</label>
+      <div id="vibrateChips" class="row-2" style="grid-template-columns:repeat(4,1fr); gap:8px;"></div>
+      <div class="hint">Aplica tanto en primer plano como en las alertas del backend en segundo plano.</div>
     </div>
 
     <button class="btn block" id="testAlertBtn" style="margin-top:6px;">Probar alerta ahora</button>
@@ -318,7 +370,37 @@
     notify: false,
     sound: true,
     vibrate: true,
+    toneId: 1,
+    vibrateIntensity: "media",
+    backendUrl: "",
+    bgPushEnabled: false,
   };
+
+  const VIBRATE_PATTERNS = {
+    suave:  [150,100,150],
+    media:  [300,120,300,120,300,120,600],
+    fuerte: [400,100,400,100,400,100,400,100,800],
+    maxima: [500,80,500,80,500,80,500,80,500,80,1000],
+  };
+  const VIBRATE_LABELS = { suave:"Suave", media:"Media", fuerte:"Fuerte", maxima:"Máxima" };
+
+  const TONES = [
+    { id: 1, name: "Sirena clásica", desc: "Barrido ascendente-descendente, tipo alarma de emergencia" },
+    { id: 2, name: "Doble tono", desc: "Dos tonos alternados, como sirena de ambulancia" },
+    { id: 3, name: "Pulso rápido", desc: "Pitidos agudos y rápidos, tipo detector de humo" },
+    { id: 4, name: "Klaxon grave", desc: "Tono bajo y pulsante, urgente y penetrante" },
+    { id: 5, name: "Sirena ascendente", desc: "Rampa continua de grave a agudo, muy dramática" },
+  ];
+
+  // Debe coincidir con la llave pública VAPID del backend (insarwatch-backend/.env)
+  const VAPID_PUBLIC_KEY = "BEb0MJUzD8-sa3i7xOb29OGMqbCG0DWGRULQdI7dltPF_R9VyhiiUcGaSKWWEH1JgsELuz3BfC5OMUuk6pWU5Qc";
+
+  function urlBase64ToUint8Array(base64String){
+    const padding = "=".repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  }
 
   function loadJSON(key, fallback){
     try{
@@ -368,24 +450,105 @@
     setTimeout(()=>{ el.style.transition="opacity .3s"; el.style.opacity="0"; setTimeout(()=>el.remove(), 320); }, 4200);
   }
 
-  /* ============ sonido ============ */
+  /* ============ sonido: 5 tonos de alarma ============ */
   let audioCtx = null;
+  function getCtx(){
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playTone1(ctx, master){ // Sirena clásica: barrido ida y vuelta, 3 ciclos
+    const t0 = ctx.currentTime, cycles = 3, len = 0.5;
+    for(let i=0;i<cycles;i++){
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sawtooth";
+      const s = t0 + i*len;
+      o.frequency.setValueAtTime(560, s);
+      o.frequency.linearRampToValueAtTime(1180, s+len/2);
+      o.frequency.linearRampToValueAtTime(560, s+len);
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.linearRampToValueAtTime(0.9, s+0.03);
+      g.gain.setValueAtTime(0.9, s+len-0.05);
+      g.gain.linearRampToValueAtTime(0.0001, s+len);
+      o.connect(g).connect(master); o.start(s); o.stop(s+len+0.02);
+    }
+  }
+
+  function playTone2(ctx, master){ // Doble tono: alternado tipo ambulancia
+    const t0 = ctx.currentTime, beeps = 6, len = 0.22;
+    for(let i=0;i<beeps;i++){
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "square";
+      o.frequency.value = (i % 2 === 0) ? 880 : 660;
+      const s = t0 + i*len;
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.linearRampToValueAtTime(0.8, s+0.02);
+      g.gain.setValueAtTime(0.8, s+len-0.04);
+      g.gain.linearRampToValueAtTime(0.0001, s+len);
+      o.connect(g).connect(master); o.start(s); o.stop(s+len+0.01);
+    }
+  }
+
+  function playTone3(ctx, master){ // Pulso rápido: pitidos agudos tipo detector de humo
+    const t0 = ctx.currentTime, beeps = 9, len = 0.1, gap = 0.06;
+    for(let i=0;i<beeps;i++){
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "square"; o.frequency.value = 2200;
+      const s = t0 + i*(len+gap);
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.linearRampToValueAtTime(0.75, s+0.008);
+      g.gain.setValueAtTime(0.75, s+len-0.02);
+      g.gain.linearRampToValueAtTime(0.0001, s+len);
+      o.connect(g).connect(master); o.start(s); o.stop(s+len+0.01);
+    }
+  }
+
+  function playTone4(ctx, master){ // Klaxon grave: pulsante, urgente
+    const t0 = ctx.currentTime, pulses = 5, len = 0.28;
+    for(let i=0;i<pulses;i++){
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sawtooth"; o.frequency.value = 190;
+      const s = t0 + i*len;
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.linearRampToValueAtTime(1.0, s+0.015);
+      g.gain.setValueAtTime(1.0, s+len-0.06);
+      g.gain.linearRampToValueAtTime(0.0001, s+len);
+      o.connect(g).connect(master); o.start(s); o.stop(s+len+0.01);
+    }
+  }
+
+  function playTone5(ctx, master){ // Sirena ascendente: rampa continua, dramática
+    const t0 = ctx.currentTime, cycles = 2, len = 0.75;
+    for(let i=0;i<cycles;i++){
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sawtooth";
+      const s = t0 + i*len;
+      o.frequency.setValueAtTime(300, s);
+      o.frequency.exponentialRampToValueAtTime(1700, s+len);
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.linearRampToValueAtTime(0.85, s+0.04);
+      g.gain.setValueAtTime(0.85, s+len-0.06);
+      g.gain.linearRampToValueAtTime(0.0001, s+len);
+      o.connect(g).connect(master); o.start(s); o.stop(s+len+0.02);
+    }
+  }
+
+  const TONE_PLAYERS = { 1: playTone1, 2: playTone2, 3: playTone3, 4: playTone4, 5: playTone5 };
+
+  function playToneById(id){
+    try{
+      const ctx = getCtx();
+      const master = ctx.createGain();
+      master.gain.value = 0.35;
+      master.connect(ctx.destination);
+      (TONE_PLAYERS[id] || playTone1)(ctx, master);
+    }catch(e){}
+  }
+
   function beep(){
     if(!config.sound) return;
-    try{
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const t0 = audioCtx.currentTime;
-      [880, 660].forEach((freq, i)=>{
-        const o = audioCtx.createOscillator();
-        const g = audioCtx.createGain();
-        o.type = "square"; o.frequency.value = freq;
-        g.gain.setValueAtTime(0.0001, t0 + i*0.16);
-        g.gain.exponentialRampToValueAtTime(0.18, t0 + i*0.16 + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, t0 + i*0.16 + 0.14);
-        o.connect(g).connect(audioCtx.destination);
-        o.start(t0 + i*0.16); o.stop(t0 + i*0.16 + 0.15);
-      });
-    }catch(e){}
+    playToneById(config.toneId);
   }
 
   /* ============ notificaciones ============ */
@@ -393,12 +556,17 @@
   if("serviceWorker" in navigator){
     navigator.serviceWorker.register("sw.js").then(r => swReg = r).catch(()=>{});
   }
+  function currentVibratePattern(){
+    return VIBRATE_PATTERNS[config.vibrateIntensity] || VIBRATE_PATTERNS.media;
+  }
+
   function notify(title, body){
-    if(config.vibrate && navigator.vibrate) navigator.vibrate([120,60,120]);
+    const pattern = currentVibratePattern();
+    if(config.vibrate && navigator.vibrate) navigator.vibrate(pattern);
     beep();
     if(!config.notify) return;
     if(!("Notification" in window) || Notification.permission !== "granted") return;
-    const opts = { body, icon:"icon-192.png", badge:"icon-192.png", tag:"insarwatch-alert-"+Date.now(), vibrate:[120,60,120] };
+    const opts = { body, icon:"icon-192.png", badge:"icon-192.png", tag:"insarwatch-alert-"+Date.now(), vibrate:pattern, requireInteraction:true };
     if(swReg && swReg.active){
       swReg.active.postMessage({ type:"SHOW_NOTIFICATION", title, options: opts });
     } else if("Notification" in window){
@@ -730,6 +898,11 @@
     document.getElementById("notifToggle").checked = !!config.notify;
     document.getElementById("soundToggle").checked = !!config.sound;
     document.getElementById("vibrateToggle").checked = !!config.vibrate;
+    renderToneList();
+    renderVibrateChips();
+    document.getElementById("backendUrl").value = config.backendUrl || "";
+    document.getElementById("bgPushToggle").checked = !!config.bgPushEnabled;
+    setBgPushStatus(config.bgPushEnabled ? "activo — el servidor te avisará aunque cierres la app" : "Desactivado");
     updateNotifSub();
   }
   function updateNotifSub(){
@@ -739,6 +912,140 @@
     else if(Notification.permission === "denied") sub.textContent = "Permiso bloqueado por el navegador";
     else sub.textContent = "Requiere permiso del navegador";
   }
+
+  function renderToneList(){
+    const wrap = document.getElementById("toneList");
+    wrap.innerHTML = TONES.map(t => `
+      <div class="tone-item ${config.toneId === t.id ? "selected":""}" data-tone="${t.id}">
+        <div class="radio"></div>
+        <div class="ti-text">
+          <div class="ti-name">${t.name}</div>
+          <div class="ti-desc">${t.desc}</div>
+        </div>
+        <div class="ti-play" data-play="${t.id}">▶</div>
+      </div>`).join("");
+
+    wrap.querySelectorAll(".tone-item").forEach(el=>{
+      el.addEventListener("click", (e)=>{
+        if(e.target.closest(".ti-play")) return; // el botón de play no selecciona
+        const id = parseInt(el.dataset.tone, 10);
+        config.toneId = id;
+        saveJSON(LS.cfg, config);
+        renderToneList();
+        playToneById(id);
+      });
+    });
+    wrap.querySelectorAll(".ti-play").forEach(btn=>{
+      btn.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        playToneById(parseInt(btn.dataset.play, 10));
+      });
+    });
+  }
+
+  function renderVibrateChips(){
+    const wrap = document.getElementById("vibrateChips");
+    const order = ["suave","media","fuerte","maxima"];
+    wrap.innerHTML = order.map(k => `
+      <div class="vib-chip ${config.vibrateIntensity===k?"selected":""}" data-vib="${k}">${VIBRATE_LABELS[k]}</div>
+    `).join("");
+    wrap.querySelectorAll(".vib-chip").forEach(el=>{
+      el.addEventListener("click", ()=>{
+        config.vibrateIntensity = el.dataset.vib;
+        saveJSON(LS.cfg, config);
+        renderVibrateChips();
+        if(navigator.vibrate) navigator.vibrate(currentVibratePattern());
+        if(config.bgPushEnabled) subscribeBackgroundPush();
+      });
+    });
+  }
+
+  /* ============ push en segundo plano (vía backend) ============ */
+  function setBgPushStatus(text){ document.getElementById("bgPushSub").textContent = text; }
+
+  async function subscribeBackgroundPush(){
+    if(!config.backendUrl){
+      toast("Primero escribe la URL del backend", "info");
+      document.getElementById("bgPushToggle").checked = false;
+      return false;
+    }
+    if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+      toast("Este navegador no soporta notificaciones push", "info");
+      document.getElementById("bgPushToggle").checked = false;
+      return false;
+    }
+    try{
+      setBgPushStatus("activando…");
+      const perm = await Notification.requestPermission();
+      if(perm !== "granted") throw new Error("Permiso de notificaciones denegado");
+
+      const reg = swReg || await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if(!sub){
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
+
+      const res = await fetch(config.backendUrl.replace(/\/$/,"") + "/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subscription: sub,
+          apiUrl: config.apiUrl,
+          threshold: config.threshold,
+          vibrate: currentVibratePattern(),
+        }),
+      });
+      if(!res.ok) throw new Error("El backend respondió " + res.status);
+
+      setBgPushStatus("activo — el servidor te avisará aunque cierres la app");
+      toast("Alertas en segundo plano activadas", "info");
+      return true;
+    }catch(err){
+      console.error(err);
+      setBgPushStatus("no se pudo activar: " + err.message);
+      toast("No se pudo activar el segundo plano: " + err.message, "info");
+      document.getElementById("bgPushToggle").checked = false;
+      return false;
+    }
+  }
+
+  async function unsubscribeBackgroundPush(silent){
+    try{
+      const reg = swReg || await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if(sub){
+        if(config.backendUrl){
+          fetch(config.backendUrl.replace(/\/$/,"") + "/unsubscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+          }).catch(()=>{});
+        }
+        await sub.unsubscribe();
+      }
+      setBgPushStatus("desactivado");
+      if(!silent) toast("Alertas en segundo plano desactivadas", "info");
+    }catch(err){ console.error(err); }
+  }
+
+  document.getElementById("backendUrl").addEventListener("change", e=>{
+    config.backendUrl = e.target.value.trim();
+    saveJSON(LS.cfg, config);
+  });
+
+  document.getElementById("bgPushToggle").addEventListener("change", async e=>{
+    if(e.target.checked){
+      const ok = await subscribeBackgroundPush();
+      config.bgPushEnabled = ok;
+    } else {
+      await unsubscribeBackgroundPush();
+      config.bgPushEnabled = false;
+    }
+    saveJSON(LS.cfg, config);
+  });
 
   document.getElementById("apiUrl").addEventListener("change", e=>{
     config.apiUrl = e.target.value.trim() || defaultConfig.apiUrl;
