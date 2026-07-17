@@ -1,4 +1,4 @@
-const CACHE = "insarwatch-v1";
+const CACHE = "insarwatch-v2";
 const ASSETS = ["./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -30,6 +30,23 @@ self.addEventListener("message", (e) => {
     const { title, options } = e.data;
     self.registration.showNotification(title, options);
   }
+});
+
+// Notificaciones push enviadas por el backend (funcionan con la app cerrada)
+self.addEventListener("push", (e) => {
+  let payload = { title: "⚠️ Pico detectado", body: "Revisa la app InsarWatch." };
+  try{ if(e.data) payload = Object.assign(payload, e.data.json()); }catch(err){}
+
+  const options = {
+    body: payload.body,
+    icon: "icon-192.png",
+    badge: "icon-192.png",
+    vibrate: Array.isArray(payload.vibrate) ? payload.vibrate : [300,120,300,120,300,120,600],
+    requireInteraction: true,
+    tag: "insarwatch-bg-" + Date.now(),
+    data: { url: "./index.html" },
+  };
+  e.waitUntil(self.registration.showNotification(payload.title, options));
 });
 
 self.addEventListener("notificationclick", (e) => {
